@@ -3,6 +3,7 @@ mod admin;
 mod worker;
 mod db;
 mod monitor;
+mod server;
 
 use clap::{Parser, Subcommand};
 use anyhow::Result;
@@ -27,14 +28,15 @@ enum Commands {
     Monitor { #[command(subcommand)] action: MonitorCommands },
     Mail { #[command(subcommand)] action: MailCommands },
     Rig { #[command(subcommand)] action: RigCommands },
-    Beads { #[command(subcommand)] action: BeadsCommands },
+    Board { #[command(subcommand)] action: BoardCommands },
     Costs { #[command(subcommand)] action: CostsCommands },
-    Sling { task_id: String, agent_name: String },
+    Start { task_id: String, agent_name: String, #[arg(short, long, default_value = "gemini")] engine: String },
     Handoff { #[command(subcommand)] action: HandoffCommands },
     Done { task_id: String },
     Peek { agent_name: String },
     Trail,
     Nudge { agent_name: String, message: String },
+    Serve { #[arg(short, long, default_value_t = 3030)] port: u16 },
 }
 
 #[derive(Subcommand)]
@@ -73,7 +75,7 @@ enum RigCommands {
 }
 
 #[derive(Subcommand)]
-enum BeadsCommands {
+enum BoardCommands {
     List,
 }
 
@@ -102,8 +104,8 @@ fn main() -> Result<()> {
         }
         Commands::Worker { action } => match action {
             WorkerCommands::Spawn { task_id, name } => {
-                // Fix: Clone name so we can use it for logging later
-                let w = worker::Worker::new(task_id, name.clone(), work_dir);
+                // Fix: Added default engine "gemini" for raw spawn
+                let w = worker::Worker::new(task_id, name.clone(), work_dir, "gemini".to_string());
                 w.spawn()?;
                 let _ = database.log_audit("user", "spawn", &name, "success");
             }
@@ -187,10 +189,10 @@ fn main() -> Result<()> {
                 }
             }
         },
-        Commands::Beads { action } => match action {
-            BeadsCommands::List => {
+        Commands::Board { action } => match action {
+            BoardCommands::List => {
                 println!("╔══════════════════════════════════════════════════════════════════════════╗");
-                println!("║ 💠 THINK-TODO COCKPIT (SYSTEM PULSE)                                     ║");
+                println!("║ 💠 THINK-TODO BOARD (SYSTEM PULSE)                                       ║");
                 println!("╠══════════════════════════════════════════════════════════════════════════╣");
 
                 // 1. Task Progress Summary
@@ -201,8 +203,8 @@ fn main() -> Result<()> {
                 let open = counts.get("open").unwrap_or(&0);
                 let in_p = counts.get("in_progress").unwrap_or(&0);
                 let closed = counts.get("closed").unwrap_or(&0);
-                let total = open + in_p + closed;
-                let progress = if total > 0 { (closed as f64 / total as f64) * 100.0 } else { 0.0 };
+                let total = *open + *in_p + *closed;
+                let progress = if total > 0 { (*closed as f64 / total as f64) * 100.0 } else { 0.0 };
 
                 println!("  [TASKS] Progress: [{:<20}] {:.1}%", "=".repeat((progress/5.0) as usize), progress);
                 println!("          Total: {} | ⏳ Open: {} | 🚀 Active: {} | ✅ Done: {}", total, open, in_p, closed);
@@ -276,12 +278,12 @@ fn main() -> Result<()> {
                 println!("✅ Cost entry added for task {}.", task_id);
             }
         },
-        Commands::Sling { task_id, agent_name } => {
-            println!("🎯 SLING: Dispatching task '{}' to agent '{}'...", task_id, agent_name);
-            let w = worker::Worker::new(task_id.clone(), agent_name.clone(), work_dir);
+        Commands::Start { task_id, agent_name, engine } => {
+            println!("🎯 START: Dispatching task '{}' to agent '{}' using engine '{}'...", task_id, agent_name, engine);
+            let w = worker::Worker::new(task_id.clone(), agent_name.clone(), work_dir, engine.clone());
             w.spawn()?;
-            database.log_audit(&agent_name, "sling_assigned", &task_id, "success")?;
-            database.conn.execute("UPDATE tasks SET assignee = ?1, status = 'in_progress' WHERE id = ?2", params![agent_name, task_id])?;
+            database.log_audit(&agent_name, "task_started", &task_id, "success")?;
+            database.conn.execute("UPDATE tasks SET assignee = ?1, status = 'in_progress', engine = ?2 WHERE id = ?3", params![agent_name, engine, task_id])?;
             println!("🚀 Agent '{}' is now on the hook for '{}'.", agent_name, task_id);
         },
         Commands::Handoff { action } => match action {
@@ -356,6 +358,12 @@ fn main() -> Result<()> {
                 database.log_audit("user", "nudge_mailed", &agent_name, "success")?;
                 println!("✅ Nudge sent to agent's inbox.");
             }
+        }
+        Commands::Serve { port } => {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(server::start_server(port));
         }
     }
     Ok(())
