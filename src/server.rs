@@ -74,6 +74,8 @@ pub async fn start_server(port: u16) {
         .route("/api/dashboard", get(get_dashboard))
         .route("/api/logs/{task_id}/{agent_name}", get(get_agent_logs))
         .route("/api/prompts/{role}", get(get_prompt))
+        .route("/api/agents/{agent_name}/files", get(list_agent_files))
+        .route("/api/tasks/{task_id}/history", get(get_task_history))
         // Actions
         .route("/api/tasks", post(add_task))
         .route("/api/tasks/{task_id}", axum::routing::delete(delete_task))
@@ -153,6 +155,45 @@ async fn get_prompt(Path(role): Path<String>) -> Json<serde_json::Value> {
     let path = work_dir.join("prompts").join(format!("{}.md", role));
     let content = fs::read_to_string(path).unwrap_or_else(|_| "Prompt not found.".to_string());
     Json(serde_json::json!({"content": content}))
+}
+
+async fn list_agent_files(Path(agent_name): Path<String>) -> Json<serde_json::Value> {
+    let work_dir = env::current_dir().unwrap();
+    let agent_path = work_dir.join("workers").join(&agent_name);
+    let mut files = Vec::new();
+    
+    if agent_path.exists() {
+        if let Ok(entries) = fs::read_dir(agent_path) {
+            for entry in entries.flatten() {
+                if let Ok(name) = entry.file_name().into_string() {
+                    if name != ".git" && name != ".DS_Store" {
+                        files.push(name);
+                    }
+                }
+            }
+        }
+    }
+    Json(serde_json::json!({"files": files}))
+}
+
+async fn get_task_history(Path(task_id): Path<String>) -> Json<serde_json::Value> {
+    let work_dir = env::current_dir().unwrap();
+    let db = Db::new(work_dir).unwrap();
+    
+    // Search for logs where target is task_id OR actor is the task's assignee
+    let mut stmt = db.conn.prepare("SELECT timestamp, actor, action, target, status FROM audit_logs WHERE target = ?1 OR actor IN (SELECT assignee FROM tasks WHERE id = ?1) ORDER BY timestamp DESC").unwrap();
+    
+    let history = stmt.query_map([&task_id], |row| {
+        Ok(serde_json::json!({
+            "timestamp": row.get::<_, i64>(0)?,
+            "actor": row.get::<_, String>(1)?,
+            "action": row.get::<_, String>(2)?,
+            "target": row.get::<_, String>(3)?,
+            "status": row.get::<_, String>(4)?,
+        }))
+    }).unwrap().map(|r| r.unwrap()).collect::<Vec<_>>();
+
+    Json(serde_json::json!({"history": history}))
 }
 
 async fn get_agent_logs(Path((task_id, agent_name)): Path<(String, String)>) -> Json<AgentLogResponse> {

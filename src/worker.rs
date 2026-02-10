@@ -7,32 +7,35 @@ pub struct Worker {
     pub id: String, 
     pub name: String, 
     pub work_dir: PathBuf,
-    pub engine: String, // gemini, opencode, claude
+    pub engine: String,
+    pub role: String, // mayor, worker, witness
 }
 
 impl Worker {
-    pub fn new(id: String, name: String, work_dir: PathBuf, engine: String) -> Self { 
-        Self { id, name, work_dir, engine } 
+    pub fn new(id: String, name: String, work_dir: PathBuf, engine: String, role: String) -> Self { 
+        Self { id, name, work_dir, engine, role } 
     }
     pub fn spawn(&self) -> Result<()> {
         let session_name = format!("worker-{}", self.name);
         let worker_path = self.work_dir.join("workers").join(&self.name);
         let _ = fs::create_dir_all(&worker_path);
         
-        let prompt_path = self.work_dir.join("prompts").join("worker.md");
-        let base = fs::read_to_string(prompt_path).unwrap_or_else(|_| "You are Think Todo Worker.".to_string());
+        let base_prompt = fs::read_to_string(self.work_dir.join("prompts").join("base.md")).unwrap_or_default();
+        let role_prompt = fs::read_to_string(self.work_dir.join("prompts").join("roles").join(format!("{}.md", self.role)))
+            .unwrap_or_else(|_| "You are a specialized agent.".to_string());
+        
+        let final_instruction = format!("{}\n\n{}\n\nMISSION ID: {}\nMISSIONS: {}\n\nEXECUTE NOW.", 
+            base_prompt, role_prompt, self.id, self.id);
         
         let log_dir = self.work_dir.join(".logs").join("tasks").join(&self.id);
         let _ = fs::create_dir_all(&log_dir);
         let log_file = log_dir.join(format!("{}.log", self.name));
 
-        let final_prompt = format!("{} MISSION: {} . Start coding now.", base.replace("\"", "'"), self.id.replace("\"", "'"));
-        
         // Choose CLI tool based on engine
         let engine_cmd = match self.engine.as_str() {
-            "opencode" => format!("opencode \"{}\"", final_prompt.replace("\"", "\\\"")),
-            "claude" => format!("claude \"{}\"", final_prompt.replace("\"", "\\\"")),
-            _ => format!("gemini --approval-mode yolo \"{}\"", final_prompt.replace("\"", "\\\"")),
+            "opencode" => format!("opencode \"{}\"", final_instruction.replace("\"", "\\\"")),
+            "claude" => format!("claude \"{}\"", final_instruction.replace("\"", "\\\"")),
+            _ => format!("gemini --approval-mode yolo \"{}\"", final_instruction.replace("\"", "\\\"")),
         };
 
         let cmd = format!("export PATH=$PATH:/Users/xucongyong/.bun/bin && cd {} && ({} 2>&1 | tee {})", 

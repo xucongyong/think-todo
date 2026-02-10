@@ -6,12 +6,10 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn new(work_dir: PathBuf) -> anyhow::Result<Self> {
-        let db_path = work_dir.join("think.db");
-        let conn = Connection::open(db_path)?;
-        conn.execute("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT, status TEXT DEFAULT 'open', assignee TEXT, engine TEXT, created_at INTEGER)", [])?;
-        // Migration: Ensure engine column exists if table was created earlier
+        conn.execute("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT, status TEXT DEFAULT 'open', assignee TEXT, engine TEXT, role TEXT, created_at INTEGER)", [])?;
+        // Migration: Ensure columns exist
         let _ = conn.execute("ALTER TABLE tasks ADD COLUMN engine TEXT", []);
+        let _ = conn.execute("ALTER TABLE tasks ADD COLUMN role TEXT", []);
         conn.execute("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT, target TEXT, status TEXT, timestamp INTEGER)", [])?;
         conn.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, receiver TEXT, subject TEXT, body TEXT, status TEXT DEFAULT 'unread', timestamp INTEGER)", [])?;
         conn.execute("CREATE TABLE IF NOT EXISTS rigs (name TEXT PRIMARY KEY, path TEXT, repo TEXT, status TEXT DEFAULT 'active', last_sync INTEGER)", [])?;

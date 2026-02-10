@@ -97,7 +97,7 @@
                                 <p class="text-xs text-gray-400 mt-1 max-w-2xl" x-text="selectedTask.title"></p>
                             </div>
                             <div class="flex space-x-2">
-                                <button @click="deleteTask(selectedTask.id)" class="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-600/50 text-[10px] font-black px-4 py-2 rounded transition uppercase tracking-widest shadow-lg shadow-red-900/20">Delete Mission</button>
+                                <button @click="deleteTask(selectedTask.id)" class="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-600/50 text-[10px] font-black px-4 py-2 rounded transition uppercase tracking-widest shadow-lg shadow-red-900/20">Delete</button>
                             </div>
                         </div>
 
@@ -154,17 +154,62 @@
                         </div>
                     </div>
 
-                    <!-- Telemetry / Logs Section -->
+                    <!-- Telemetry Tabs Section -->
                     <div class="flex-1 flex flex-col min-h-0 bg-black/40">
-                        <div class="px-6 py-2 border-b border-gray-800 flex justify-between items-center bg-black/20">
-                            <span class="text-[8px] font-bold text-gray-500 tracking-[0.3em] uppercase">Neural Telemetry</span>
-                            <button @click="viewPrompt('worker')" class="text-[8px] text-blue-500 hover:underline">View System Cortex</button>
+                        <div class="flex border-b border-gray-800 bg-black/20 px-4">
+                            <button @click="activeTab = 'logs'" :class="activeTab === 'logs' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-500'" class="px-4 py-3 text-[10px] font-black tracking-widest uppercase transition">Logs</button>
+                            <button @click="activeTab = 'prompt'; fetchPrompt()" :class="activeTab === 'prompt' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-500'" class="px-4 py-3 text-[10px] font-black tracking-widest uppercase transition">Prompt</button>
+                            <button @click="activeTab = 'files'; fetchFiles()" :class="activeTab === 'files' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-500'" class="px-4 py-3 text-[10px] font-black tracking-widest uppercase transition">Files</button>
+                            <button @click="activeTab = 'history'; fetchHistory()" :class="activeTab === 'history' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-gray-500'" class="px-4 py-3 text-[10px] font-black tracking-widest uppercase transition">History</button>
                         </div>
-                        <div class="flex-1 overflow-y-auto p-6 font-mono text-[11px] leading-relaxed" id="log-scroll">
-                            <template x-if="selectedTask.status === 'open'">
-                                <p class="text-gray-600 italic">Waiting for deployment instructions...</p>
-                            </template>
-                            <pre class="text-green-500/80 whitespace-pre-wrap" x-text="logsContent"></pre>
+
+                        <div class="flex-1 overflow-y-auto p-6 font-mono text-[11px] leading-relaxed">
+                            <!-- Logs Tab -->
+                            <div x-show="activeTab === 'logs'">
+                                <template x-if="selectedTask.status === 'open'">
+                                    <p class="text-gray-600 italic">Waiting for deployment...</p>
+                                </template>
+                                <pre class="text-green-500/80 whitespace-pre-wrap" x-text="logsContent"></pre>
+                            </div>
+
+                            <!-- Prompt Tab -->
+                            <div x-show="activeTab === 'prompt'" x-cloak>
+                                <pre class="text-blue-300/70 whitespace-pre-wrap" x-text="promptContent"></pre>
+                            </div>
+
+                            <!-- Files Tab -->
+                            <div x-show="activeTab === 'files'" x-cloak>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <template x-for="file in agentFiles" :key="file">
+                                        <div class="bg-gray-800/50 border border-gray-700 p-2 rounded flex items-center space-x-2 text-gray-300">
+                                            <svg class="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                            <span x-text="file"></span>
+                                        </div>
+                                    </template>
+                                    <div x-show="agentFiles.length === 0" class="col-span-2 text-gray-600 italic">No artifacts generated yet.</div>
+                                </div>
+                            </div>
+
+                            <!-- History Tab -->
+                            <div x-show="activeTab === 'history'" x-cloak class="space-y-4">
+                                <template x-for="h in taskHistory" :key="h.timestamp + h.action">
+                                    <div class="flex items-start space-x-3 border-l border-gray-800 pl-4 relative">
+                                        <div class="absolute -left-1.5 top-1.5 w-3 h-3 bg-gray-800 border border-gray-700 rounded-full"></div>
+                                        <div>
+                                            <div class="flex items-center space-x-2 mb-1">
+                                                <span class="text-[9px] text-gray-500 font-bold" x-text="formatTime(h.timestamp)"></span>
+                                                <span class="text-[10px] text-purple-400 font-black uppercase" x-text="h.actor"></span>
+                                            </div>
+                                            <p class="text-gray-300">
+                                                <span class="text-yellow-500 italic" x-text="h.action"></span>
+                                                <span class="text-gray-500"> on </span>
+                                                <span class="text-blue-400" x-text="h.target"></span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div x-show="taskHistory.length === 0" class="text-gray-600 italic text-center py-8">No history recorded for this mission.</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -187,11 +232,11 @@
         </div>
     </div>
 
-    <!-- Cortex Viewer -->
+    <!-- Prompt Viewer -->
     <div x-show="showPrompt" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-8" x-cloak>
         <div class="bg-gray-900 border border-blue-900/30 w-full h-full max-w-4xl rounded-xl flex flex-col p-8 shadow-2xl">
             <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
-                <h2 class="text-xl font-black text-blue-500 tracking-tighter uppercase italic">Cortex Trace</h2>
+                <h2 class="text-xl font-black text-blue-500 tracking-tighter uppercase italic">AI Instructions</h2>
                 <button @click="showPrompt = false" class="text-gray-500 hover:text-white transition text-2xl">&times;</button>
             </div>
             <div class="flex-1 overflow-y-auto bg-black/50 p-6 rounded border border-gray-800">
@@ -206,15 +251,17 @@
                 tasks: [], stats: { total_cost: 0, tasks_done: 0, tasks_total: 0 },
                 selectedTask: null,
                 logsContent: '',
-                showAddTask: false, showPrompt: false,
+                promptContent: '',
+                agentFiles: [],
+                taskHistory: [],
+                activeTab: 'logs',
+                showAddTask: false,
                 newTask: { id: '', title: '' },
                 startData: { agent_name: '', engine: 'gemini' },
-                promptContent: '',
                 
                 init() {
                     this.refresh();
                     setInterval(() => this.refresh(), 2000);
-                    // Generate random default callsign
                     this.startData.agent_name = 'unit-' + Math.floor(1000 + Math.random() * 9000);
                 },
                 async refresh() {
@@ -224,29 +271,46 @@
                         this.tasks = d.tasks;
                         this.stats = d.stats;
                         
-                        // Sync selected task status if already selected
                         if (this.selectedTask) {
                             const updated = this.tasks.find(t => t.id === this.selectedTask.id);
                             if (updated) this.selectedTask = updated;
-                            if (this.selectedTask.status === 'in_progress') this.fetchLogs();
+                            if (this.selectedTask.status === 'in_progress' && this.activeTab === 'logs') this.fetchLogs();
+                            if (this.selectedTask.status === 'in_progress' && this.activeTab === 'files') this.fetchFiles();
                         }
                     } catch (e) {}
                 },
                 selectTask(task) {
                     this.selectedTask = task;
                     this.logsContent = 'Linking...';
+                    this.activeTab = 'logs';
                     this.startData.task_id = task.id;
                     if (task.status === 'in_progress') this.fetchLogs();
                     else this.logsContent = '';
                 },
                 async fetchLogs() {
-                    if (!this.selectedTask || this.selectedTask.status !== 'in_progress') return;
+                    if (!this.selectedTask || !this.selectedTask.assignee) return;
                     try {
                         const res = await fetch(`/api/logs/${this.selectedTask.id}/${this.selectedTask.assignee}`);
                         const d = await res.json();
                         this.logsContent = d.content;
-                        // Auto-scroll logic could go here
                     } catch (e) { this.logsContent = 'Telemetry lost...'; }
+                },
+                async fetchPrompt() {
+                    const res = await fetch(`/api/prompts/worker`);
+                    const d = await res.json();
+                    this.promptContent = d.content;
+                },
+                async fetchFiles() {
+                    if (!this.selectedTask || !this.selectedTask.assignee) return;
+                    const res = await fetch(`/api/agents/${this.selectedTask.assignee}/files`);
+                    const d = await res.json();
+                    this.agentFiles = d.files;
+                },
+                async fetchHistory() {
+                    if (!this.selectedTask) return;
+                    const res = await fetch(`/api/tasks/${this.selectedTask.id}/history`);
+                    const d = await res.json();
+                    this.taskHistory = d.history;
                 },
                 async submitTask() {
                     if(!this.newTask.id || !this.newTask.title) return;
@@ -276,11 +340,12 @@
                     if(!msg) return;
                     await fetch('/api/nudge', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ agent_name: this.selectedTask.assignee, message: msg }) });
                 },
-                async viewPrompt(role) {
-                    const res = await fetch(`/api/prompts/${role}`);
-                    const d = await res.json();
-                    this.promptContent = d.content;
-                    this.showPrompt = true;
+                closeModals() { 
+                    this.showAddTask = false; 
+                },
+                formatTime(ts) { 
+                    const date = new Date(ts * 1000);
+                    return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0') + ':' + date.getSeconds().toString().padStart(2, '0');
                 }
             }
         }
