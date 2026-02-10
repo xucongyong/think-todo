@@ -3,272 +3,284 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TT Control Center</title>
+    <title>TT Mission Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
-        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { gray: { 900: '#0a0f1e', 800: '#161b2d', 700: '#2d334a' } }, fontFamily: { mono: ['Fira Code', 'Menlo', 'monospace'] } } } }
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { gray: { 900: '#05070a', 800: '#0f1219', 700: '#1f2533' } }, fontFamily: { mono: ['Fira Code', 'Menlo', 'monospace'] } } } }
     </script>
     <style>
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #0a0f1e; }
-        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
         [x-cloak] { display: none !important; }
-        .glass { background: rgba(22, 27, 45, 0.7); backdrop-filter: blur(10px); }
+        .active-row { background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; }
+        .neural-bg { background: radial-gradient(circle at top right, rgba(29, 78, 216, 0.05), transparent); }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 font-mono h-screen overflow-hidden flex flex-col" x-data="app()" @keydown.escape="closeModals()">
-
-    <!-- Modals -->
-    <!-- 1. Agent Detail / Logs -->
-    <div x-show="showAgentDetail" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" x-cloak>
-        <div class="bg-gray-800 border border-gray-700 w-full h-full max-w-6xl rounded-xl shadow-2xl flex flex-col overflow-hidden">
-            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
-                <div class="flex items-center space-x-4">
-                    <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-                    <h2 class="text-lg font-bold text-green-400" x-text="'AGENT: ' + activeAgent.name"></h2>
-                    <span class="text-gray-500">|</span>
-                    <span class="text-blue-400 text-sm" x-text="'TASK ' + activeAgent.taskId"></span>
-                </div>
-                <button @click="showAgentDetail = false" class="text-gray-400 hover:text-white transition">&times; CLOSE</button>
-            </div>
-            <div class="flex-1 flex overflow-hidden">
-                <div class="w-64 bg-gray-900 border-r border-gray-700 p-4 space-y-4 text-center">
-                    <button @click="nudgeAgent()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white py-2 rounded font-bold transition text-xs">NUDGE AGENT</button>
-                    <button @click="markAsDone(activeAgent.taskId)" class="w-full bg-green-700 hover:bg-green-600 text-white py-2 rounded font-bold transition text-xs">MARK DONE</button>
-                    <div class="pt-4 border-t border-gray-800 flex flex-col space-y-2">
-                        <button @click="viewPrompt('worker')" class="text-[10px] text-blue-400 hover:underline text-left">View System Prompt</button>
-                    </div>
-                </div>
-                <div class="flex-1 bg-black p-4 overflow-y-auto" id="log-view">
-                    <pre class="text-green-500 text-[11px] leading-relaxed whitespace-pre-wrap" x-text="activeAgent.logs"></pre>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 2. Start Modal -->
-    <div x-show="showStartModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" x-cloak>
-        <div class="bg-gray-800 border border-gray-700 p-6 rounded-xl w-[400px] shadow-2xl">
-            <h2 class="text-lg font-bold mb-4 text-blue-400 uppercase tracking-tighter text-center">Deploy Agent</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="text-[10px] text-gray-500 font-bold mb-1 block uppercase">Callsign</label>
-                    <input x-model="startData.agent_name" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm" placeholder="e.g. spider-01">
-                </div>
-                <div>
-                    <label class="text-[10px] text-gray-500 font-bold mb-1 block uppercase">Engine</label>
-                    <select x-model="startData.engine" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm">
-                        <option value="gemini">Google Gemini (YOLO)</option>
-                        <option value="opencode">OpenCode</option>
-                        <option value="claude">Claude Native</option>
-                    </select>
-                </div>
-                <div class="flex justify-end space-x-3 pt-4">
-                    <button @click="showStartModal = false" class="text-gray-500 text-xs uppercase font-bold">Cancel</button>
-                    <button @click="submitStart()" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded text-xs font-bold text-white uppercase">Ignite</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. Add Task Modal -->
-    <div x-show="showAddTask" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" x-cloak>
-        <div class="bg-gray-800 border border-gray-700 p-6 rounded-xl w-96 shadow-2xl">
-            <h2 class="text-lg font-bold mb-4 text-blue-400 uppercase tracking-widest text-center">New Mission</h2>
-            <div class="space-y-4">
-                <input x-model="newTask.id" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm" placeholder="Mission ID (e.g. T1)">
-                <textarea x-model="newTask.title" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm h-32" placeholder="Mission Objective..."></textarea>
-                <div class="flex justify-end space-x-3">
-                    <button @click="showAddTask = false" class="text-gray-500 text-xs font-bold uppercase">Cancel</button>
-                    <button @click="submitTask()" class="bg-blue-600 px-4 py-2 rounded text-xs font-bold text-white uppercase tracking-widest shadow-lg">Confirm</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 4. Prompt Viewer -->
-    <div x-show="showPrompt" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/95 p-8" x-cloak>
-        <div class="bg-gray-900 border border-blue-900/50 w-full h-full max-w-4xl rounded-xl flex flex-col p-6 shadow-2xl">
-            <div class="flex justify-between mb-4 border-b border-gray-800 pb-4">
-                <h2 class="text-xl font-black text-blue-500 tracking-tighter uppercase italic">AI Cortex View</h2>
-                <button @click="showPrompt = false" class="text-gray-500 hover:text-white transition text-2xl">&times;</button>
-            </div>
-            <div class="flex-1 overflow-y-auto">
-                <pre class="text-gray-400 text-sm whitespace-pre-wrap leading-relaxed" x-text="promptContent"></pre>
-            </div>
-        </div>
-    </div>
+<body class="bg-gray-900 text-gray-100 font-mono h-screen overflow-hidden flex flex-col" x-data="app()">
 
     <!-- Top Navigation -->
-    <nav class="h-16 border-b border-gray-800 glass flex items-center justify-between px-8 z-20 shadow-2xl">
+    <nav class="h-14 border-b border-gray-800 bg-black/50 backdrop-blur-md flex items-center justify-between px-6 z-30 shadow-2xl">
         <div class="flex items-center space-x-4">
-            <div class="px-3 py-1 bg-green-500 text-black rounded font-black text-lg shadow-[0_0_15px_rgba(34,197,94,0.4)]">TT</div>
-            <h1 class="tracking-[0.3em] font-black text-gray-300 text-sm">BOARD <span class="text-blue-500 italic">v0.2</span></h1>
+            <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]">T</div>
+            <h1 class="tracking-[0.4em] font-black text-gray-400 text-xs">MISSION <span class="text-blue-500">DECK</span></h1>
         </div>
         <div class="flex items-center space-x-8">
-            <div class="text-right">
-                <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Economy</p>
-                <p class="text-green-400 font-black text-sm" x-text="'$' + stats.total_cost.toFixed(4)"></p>
+            <div class="flex space-x-4 text-[10px]">
+                <div class="text-right">
+                    <p class="text-gray-600 font-bold uppercase">Economy</p>
+                    <p class="text-green-500 font-black" x-text="'$' + stats.total_cost.toFixed(4)"></p>
+                </div>
+                <div class="text-right border-l border-gray-800 pl-4">
+                    <p class="text-gray-600 font-bold uppercase">Success Rate</p>
+                    <p class="text-blue-400 font-black" x-text="Math.round((stats.tasks_done/stats.tasks_total)*100 || 0) + '%'"></p>
+                </div>
             </div>
-            <button @click="showAddTask = true" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-[10px] font-black tracking-widest transition shadow-lg shadow-blue-900/20 uppercase">+ Task</button>
+            <button @click="showAddTask = true" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded text-[10px] font-black tracking-widest transition uppercase shadow-lg shadow-blue-900/40 border border-blue-400/20">+ New Task</button>
         </div>
     </nav>
 
     <main class="flex-1 flex overflow-hidden">
-        <!-- Dashboard Left -->
-        <div class="flex-1 flex flex-col overflow-hidden p-6 space-y-6">
-            
-            <section>
-                <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mb-4 flex items-center">
-                    <span class="w-2 h-2 bg-green-500 rounded-full mr-2 shadow-[0_0_8px_rgba(34,197,94,0.8)]"></span> Active Frontline
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <template x-for="agent in agents" :key="agent">
-                        <div @click="openAgentDetail(agent)" class="bg-gray-800 border border-gray-700 p-4 rounded-lg hover:border-blue-500 transition cursor-pointer group shadow-xl relative overflow-hidden">
-                            <div class="flex justify-between items-start mb-2 relative z-10">
-                                <span class="font-bold text-white group-hover:text-blue-400 transition" x-text="agent"></span>
-                                <span class="text-[8px] bg-green-900/30 text-green-400 px-2 py-0.5 rounded border border-green-500/20 font-black uppercase">Live</span>
+        
+        <!-- Left: Task Master List -->
+        <div class="w-1/3 flex flex-col border-r border-gray-800 bg-gray-900/50">
+            <div class="p-4 border-b border-gray-800 bg-black/20 flex justify-between items-center">
+                <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase">Operational Backlog</span>
+                <span class="text-[9px] text-gray-600" x-text="tasks.length + ' Total Missions'"></span>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <template x-for="task in tasks" :key="task.id">
+                    <div @click="selectTask(task)" 
+                         class="p-4 border-b border-gray-800/50 cursor-pointer transition relative group"
+                         :class="{ 'active-row bg-gray-800/40': selectedTask && selectedTask.id === task.id, 'hover:bg-gray-800/20': !selectedTask || selectedTask.id !== task.id }">
+                        
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-xs font-black" :class="task.status === 'in_progress' ? 'text-blue-400' : 'text-gray-500'" x-text="task.id"></span>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-[8px] px-1.5 py-0.5 rounded font-black tracking-tighter"
+                                      :class="{ 'bg-yellow-900/30 text-yellow-500': task.status === 'open', 'bg-blue-900/30 text-blue-400': task.status === 'in_progress', 'bg-green-900/30 text-green-500': task.status === 'closed' }"
+                                      x-text="task.status.toUpperCase()"></span>
+                                <button @click.stop="deleteTask(task.id)" class="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-500 transition px-1">&times;</button>
                             </div>
-                            <div class="text-[9px] text-gray-500 uppercase tracking-tighter" x-text="'Engagement: ' + getAgentTaskId(agent)"></div>
                         </div>
-                    </template>
-                    <div x-show="agents.length === 0" class="col-span-full border-2 border-dashed border-gray-800 rounded-xl py-12 text-center text-gray-600 italic text-sm">
-                        Strategic reserve ready. Awaiting orders.
+                        <h4 class="text-[11px] font-medium text-gray-300 group-hover:text-white transition line-clamp-2" x-text="task.title"></h4>
+                        
+                        <div x-show="task.status === 'in_progress'" class="mt-2 flex items-center space-x-2">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_#22c55e]"></span>
+                            <span class="text-[9px] text-gray-500 font-bold" x-text="task.assignee"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Right: Focused Command Center -->
+        <div class="flex-1 flex flex-col bg-gray-900 neural-bg relative">
+            
+            <template x-if="!selectedTask">
+                <div class="flex-1 flex flex-col items-center justify-center text-gray-700">
+                    <div class="w-16 h-16 border-2 border-gray-800 rounded-full flex items-center justify-center mb-4 opacity-20">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </div>
+                    <p class="text-[10px] font-black tracking-[0.5em] uppercase">Select a mission to bridge link</p>
+                </div>
+            </template>
+
+            <template x-if="selectedTask">
+                <div class="flex-1 flex flex-col overflow-hidden">
+                    <!-- Detail Header -->
+                    <div class="p-6 border-b border-gray-800 bg-black/20">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 class="text-2xl font-black text-white tracking-tighter" x-text="selectedTask.id"></h2>
+                                <p class="text-xs text-gray-400 mt-1 max-w-2xl" x-text="selectedTask.title"></p>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button @click="deleteTask(selectedTask.id)" class="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-600/50 text-[10px] font-black px-4 py-2 rounded transition uppercase tracking-widest shadow-lg shadow-red-900/20">Delete Mission</button>
+                            </div>
+                        </div>
+
+                        <!-- Status Context Action Bar -->
+                        <div class="flex items-center space-x-4 bg-gray-800/30 p-3 rounded-lg border border-gray-700/50">
+                            <!-- OPEN STATE: Start Controls -->
+                            <template x-if="selectedTask.status === 'open'">
+                                <div class="flex-1 flex items-center justify-between">
+                                    <div class="flex space-x-4">
+                                        <div>
+                                            <label class="text-[8px] text-gray-500 font-bold uppercase block mb-1">Assigned Unit</label>
+                                            <input x-model="startData.agent_name" class="bg-black border border-gray-700 rounded px-2 py-1 text-[10px] w-32 focus:border-blue-500 outline-none">
+                                        </div>
+                                        <div>
+                                            <label class="text-[8px] text-gray-500 font-bold uppercase block mb-1">Intelligence</label>
+                                            <select x-model="startData.engine" class="bg-black border border-gray-700 rounded px-2 py-1 text-[10px] w-32 outline-none">
+                                                <option value="gemini">Gemini YOLO</option>
+                                                <option value="opencode">OpenCode</option>
+                                                <option value="claude">Claude</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button @click="submitStart()" class="bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] px-6 py-2 rounded transition shadow-lg shadow-blue-900/40">DEPLOY AGENT</button>
+                                </div>
+                            </template>
+
+                            <!-- IN PROGRESS STATE: Live Controls -->
+                            <template x-if="selectedTask.status === 'in_progress'">
+                                <div class="flex-1 flex items-center justify-between">
+                                    <div class="flex items-center space-x-6">
+                                        <div class="flex flex-col">
+                                            <span class="text-[8px] text-gray-500 font-bold uppercase block">Intelligence</span>
+                                            <span class="text-[10px] font-black text-blue-400" x-text="selectedTask.engine.toUpperCase()"></span>
+                                        </div>
+                                        <div class="flex flex-col">
+                                            <span class="text-[8px] text-gray-500 font-bold uppercase block">Deployment</span>
+                                            <span class="text-[10px] font-black text-green-400" x-text="selectedTask.assignee"></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex space-x-2">
+                                        <button @click="nudgeAgent()" class="bg-yellow-600 hover:bg-yellow-500 text-black font-black text-[10px] px-4 py-2 rounded transition shadow-lg shadow-yellow-900/20">NUDGE</button>
+                                        <button @click="markAsDone(selectedTask.id)" class="bg-green-600 hover:bg-green-500 text-white font-black text-[10px] px-4 py-2 rounded transition shadow-lg shadow-green-900/20">STOP & DONE</button>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- CLOSED STATE -->
+                            <template x-if="selectedTask.status === 'closed'">
+                                <div class="flex-1 flex items-center space-x-4 text-green-500">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg>
+                                    <span class="text-[10px] font-black tracking-widest uppercase">Mission Successfully Archived</span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Telemetry / Logs Section -->
+                    <div class="flex-1 flex flex-col min-h-0 bg-black/40">
+                        <div class="px-6 py-2 border-b border-gray-800 flex justify-between items-center bg-black/20">
+                            <span class="text-[8px] font-bold text-gray-500 tracking-[0.3em] uppercase">Neural Telemetry</span>
+                            <button @click="viewPrompt('worker')" class="text-[8px] text-blue-500 hover:underline">View System Cortex</button>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-6 font-mono text-[11px] leading-relaxed" id="log-scroll">
+                            <template x-if="selectedTask.status === 'open'">
+                                <p class="text-gray-600 italic">Waiting for deployment instructions...</p>
+                            </template>
+                            <pre class="text-green-500/80 whitespace-pre-wrap" x-text="logsContent"></pre>
+                        </div>
                     </div>
                 </div>
-            </section>
-
-            <section class="flex-1 flex flex-col min-h-0">
-                <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mb-4">Tactical Backlog</h3>
-                <div class="flex-1 bg-gray-800/20 border border-gray-800 rounded-xl overflow-y-auto shadow-inner">
-                    <table class="w-full text-left">
-                        <thead class="sticky top-0 bg-gray-900 border-b border-gray-800 z-10 shadow-lg">
-                            <tr class="text-[9px] text-gray-500 uppercase tracking-widest font-black">
-                                <th class="p-4 w-20 text-center">Code</th>
-                                <th class="p-4">Mission Objective</th>
-                                <th class="p-4 w-32">Engine</th>
-                                <th class="p-4 w-32 text-center">Status</th>
-                                <th class="p-4 w-40 text-right">Command</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-800/50">
-                            <template x-for="task in tasks" :key="task.id">
-                                <tr class="hover:bg-gray-800/40 transition group">
-                                    <td class="p-4 font-black text-blue-500 text-xs text-center" x-text="task.id"></td>
-                                    <td class="p-4 text-xs text-gray-300 font-medium" x-text="task.title"></td>
-                                    <td class="p-4 text-[9px] text-gray-500 font-black uppercase tracking-tighter" x-text="task.engine || '-'"></td>
-                                    <td class="p-4 text-center">
-                                        <span class="text-[8px] font-black px-2 py-1 rounded uppercase tracking-tighter" 
-                                              :class="{ 'text-yellow-500 bg-yellow-500/10': task.status === 'open', 'text-blue-400 bg-blue-500/10': task.status === 'in_progress', 'text-green-500 bg-green-500/10': task.status === 'closed' }"
-                                              x-text="task.status"></span>
-                                    </td>
-                                    <td class="p-4">
-                                        <div class="flex justify-end space-x-2">
-                                            <template x-if="task.status === 'open'">
-                                                <button @click="openStartModal(task.id)" class="text-[9px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded font-black transition uppercase">Start</button>
-                                            </template>
-                                            <template x-if="task.status === 'in_progress'">
-                                                <button @click="markAsDone(task.id)" class="text-[9px] bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded font-black transition uppercase">Done</button>
-                                            </template>
-                                            <button @click="deleteTask(task.id)" class="text-[9px] bg-red-900/30 hover:bg-red-600 text-red-500 hover:text-white px-2 py-1 rounded font-black transition border border-red-500/20 uppercase">Del</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+            </template>
         </div>
     </main>
+
+    <!-- Modal: Simple Add Task -->
+    <div x-show="showAddTask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" x-cloak>
+        <div class="bg-gray-800 border border-gray-700 p-6 rounded-xl w-96 shadow-2xl">
+            <h2 class="text-lg font-black mb-4 text-blue-500 tracking-tighter uppercase">Initiate Mission</h2>
+            <div class="space-y-4">
+                <input x-model="newTask.id" class="w-full bg-black border border-gray-700 rounded p-3 text-xs outline-none focus:border-blue-500" placeholder="Code (e.g. T101)">
+                <textarea x-model="newTask.title" class="w-full bg-black border border-gray-700 rounded p-3 text-xs h-32 outline-none focus:border-blue-500" placeholder="Operational Objectives..."></textarea>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button @click="showAddTask = false" class="text-gray-500 text-[10px] font-bold uppercase">Abort</button>
+                    <button @click="submitTask()" class="bg-blue-600 px-6 py-2 rounded text-[10px] font-black text-white uppercase tracking-widest">Register</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cortex Viewer -->
+    <div x-show="showPrompt" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-8" x-cloak>
+        <div class="bg-gray-900 border border-blue-900/30 w-full h-full max-w-4xl rounded-xl flex flex-col p-8 shadow-2xl">
+            <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                <h2 class="text-xl font-black text-blue-500 tracking-tighter uppercase italic">Cortex Trace</h2>
+                <button @click="showPrompt = false" class="text-gray-500 hover:text-white transition text-2xl">&times;</button>
+            </div>
+            <div class="flex-1 overflow-y-auto bg-black/50 p-6 rounded border border-gray-800">
+                <pre class="text-gray-400 text-xs whitespace-pre-wrap leading-relaxed" x-text="promptContent"></pre>
+            </div>
+        </div>
+    </div>
 
     <script>
         function app() {
             return {
-                tasks: [], agents: [], logs: [],
-                stats: { total_cost: 0, tasks_done: 0, tasks_total: 0 },
-                showAgentDetail: false, showAddTask: false, showPrompt: false, showStartModal: false,
-                activeAgent: { name: '', taskId: '', logs: '', logPath: '' },
+                tasks: [], stats: { total_cost: 0, tasks_done: 0, tasks_total: 0 },
+                selectedTask: null,
+                logsContent: '',
+                showAddTask: false, showPrompt: false,
                 newTask: { id: '', title: '' },
-                startData: { task_id: '', agent_name: '', engine: 'gemini' },
+                startData: { agent_name: '', engine: 'gemini' },
                 promptContent: '',
                 
                 init() {
                     this.refresh();
                     setInterval(() => this.refresh(), 2000);
+                    // Generate random default callsign
+                    this.startData.agent_name = 'unit-' + Math.floor(1000 + Math.random() * 9000);
                 },
                 async refresh() {
                     try {
                         const res = await fetch('/api/dashboard');
                         const d = await res.json();
-                        this.tasks = d.tasks; 
-                        this.agents = d.agents; 
-                        this.logs = d.recent_logs; 
+                        this.tasks = d.tasks;
                         this.stats = d.stats;
-                        if (this.showAgentDetail) this.fetchLogs();
+                        
+                        // Sync selected task status if already selected
+                        if (this.selectedTask) {
+                            const updated = this.tasks.find(t => t.id === this.selectedTask.id);
+                            if (updated) this.selectedTask = updated;
+                            if (this.selectedTask.status === 'in_progress') this.fetchLogs();
+                        }
                     } catch (e) {}
                 },
-                getAgentTaskId(name) {
-                    const t = this.tasks.find(t => t.assignee === name && t.status === 'in_progress');
-                    return t ? t.id : 'N/A';
+                selectTask(task) {
+                    this.selectedTask = task;
+                    this.logsContent = 'Linking...';
+                    this.startData.task_id = task.id;
+                    if (task.status === 'in_progress') this.fetchLogs();
+                    else this.logsContent = '';
                 },
                 async fetchLogs() {
-                    if (!this.activeAgent.name || !this.activeAgent.taskId) return;
+                    if (!this.selectedTask || this.selectedTask.status !== 'in_progress') return;
                     try {
-                        const res = await fetch(`/api/logs/${this.activeAgent.taskId}/${this.activeAgent.name}`);
+                        const res = await fetch(`/api/logs/${this.selectedTask.id}/${this.selectedTask.assignee}`);
                         const d = await res.json();
-                        this.activeAgent.logs = d.content;
-                    } catch (e) {}
+                        this.logsContent = d.content;
+                        // Auto-scroll logic could go here
+                    } catch (e) { this.logsContent = 'Telemetry lost...'; }
                 },
                 async submitTask() {
-                    if(!this.newTask.id || !this.newTask.title) return alert("MISSING DATA");
+                    if(!this.newTask.id || !this.newTask.title) return;
                     await fetch('/api/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.newTask) });
                     this.showAddTask = false; this.newTask = { id: '', title: '' }; this.refresh();
                 },
-                openStartModal(tid) {
-                    this.startData = { task_id: tid, agent_name: 'coder-' + Math.floor(Math.random()*100), engine: 'gemini' };
-                    this.showStartModal = true;
-                },
                 async submitStart() {
-                    await fetch('/api/start', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.startData) });
-                    this.showStartModal = false; this.refresh();
-                },
-                async markAsDone(tid) {
-                    if(!confirm("DECOMMISSION AGENT?")) return;
-                    await fetch(`/api/done/${tid}`, { method: 'POST' });
-                    this.showAgentDetail = false; this.refresh();
-                },
-                async deleteTask(tid) {
-                    if(!confirm("PURGE TASK FROM DATABASE?")) return;
-                    await fetch(`/api/tasks/${tid}`, { method: 'DELETE' });
+                    await fetch('/api/start', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+                        task_id: this.selectedTask.id,
+                        agent_name: this.startData.agent_name,
+                        engine: this.startData.engine
+                    }) });
                     this.refresh();
                 },
+                async markAsDone(tid) {
+                    if(!confirm("DECOMMISSION UNIT?")) return;
+                    await fetch(`/api/done/${tid}`, { method: 'POST' });
+                    this.refresh();
+                },
+                async deleteTask(tid) {
+                    if(!confirm("PURGE MISSION?")) return;
+                    await fetch(`/api/tasks/${tid}`, { method: 'DELETE' });
+                    this.selectedTask = null; this.refresh();
+                },
                 async nudgeAgent() {
-                    const msg = prompt("SIGNAL CONTENT:");
+                    const msg = prompt("COMMAND SIGNAL:");
                     if(!msg) return;
-                    await fetch('/api/nudge', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ agent_name: this.activeAgent.name, message: msg }) });
+                    await fetch('/api/nudge', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ agent_name: this.selectedTask.assignee, message: msg }) });
                 },
                 async viewPrompt(role) {
                     const res = await fetch(`/api/prompts/${role}`);
                     const d = await res.json();
                     this.promptContent = d.content;
                     this.showPrompt = true;
-                },
-                openAgentDetail(name) {
-                    const t = this.tasks.find(t => t.assignee === name && t.status === 'in_progress');
-                    if(!t) return;
-                    this.activeAgent = { name, taskId: t.id, logs: 'Initializing neural link...' };
-                    this.showAgentDetail = true; 
-                    this.fetchLogs();
-                },
-                closeModals() { 
-                    this.showAgentDetail = false; this.showAddTask = false; 
-                    this.showPrompt = false; this.showStartModal = false; 
-                },
-                formatTime(ts) { 
-                    const date = new Date(ts * 1000);
-                    return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0') + ':' + date.getSeconds().toString().padStart(2, '0');
                 }
             }
         }
